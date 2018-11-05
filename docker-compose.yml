@@ -24,6 +24,8 @@ services:
       SESSION_COOKIE_HTTPONLY: 0
       SESSION_COOKIE_SECURE: 0
       STATIC_ROOT: /var/datamart/static/
+      VISION_USER: $VISION_USER
+      VISION_PASSWORD: $VISION_PASSWORD
     command: datamart
     ports:
       - 8000:8000
