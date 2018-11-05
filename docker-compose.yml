@@ -1,0 +1,116 @@
+version: '2'
+services:
+  datamart:
+    image: unicef/datamart:${VERSION}
+    environment: &environment
+      AZURE_TENANT: saxix.onmicrosoft.com
+      AZURE_CLIENT_ID: $DATAMART_AZURE_CLIENT_ID
+      AZURE_CLIENT_SECRET: $DATAMART_AZURE_CLIENT_SECRET
+      CACHE_URL: "redis://redis:6379/1"
+      CELERY_BROKER_URL: "redis://redis:6379/2"
+      CELERY_RESULT_BACKEND: "redis://redis:6379/3"
+      CSRF_COOKIE_SECURE: 0
+      DATABASE_URL: postgres://postgres:$POSTGRES_PASSWORD@db:5432/etools_datamart
+      DATABASE_URL_ETOOLS: postgres://postgres:@192.168.66.66:5432/etools
+      DEBUG: 1
+      DJANGO_SETTINGS_MODULE: etools_datamart.config.settings
+      SECRET_KEY: kuhfjhgfuytfuytfuygfuytdfuydfuygdfuygdfuytf
+      SECURE_BROWSER_XSS_FILTER: 0
+      SECURE_CONTENT_TYPE_NOSNIFF: 0
+      SECURE_FRAME_DENY: 0
+      SECURE_HSTS_PRELOAD: 0
+      SECURE_HSTS_SECONDS: 0
+      SECURE_SSL_REDIRECT: 0
+      SESSION_COOKIE_HTTPONLY: 0
+      SESSION_COOKIE_SECURE: 0
+      STATIC_ROOT: /var/datamart/static/
+    command: datamart
+    ports:
+      - 8000:8000
+
+  redis:
+    image: redis
+
+  workers:
+    image: unicef/datamart:${VERSION}
+    command: celery worker -A etools_datamart --loglevel=DEBUG --concurrency=4 --purge --pidfile run/celery.pid
+    environment: *environment
+    depends_on:
+      - db
+    links:
+      - db
+
+  beat:
+    image: unicef/datamart:${VERSION}
+    command: celery beat -A etools_datamart --loglevel=DEBUG --pidfile run/celerybeat.pid
+    environment: *environment
+    depends_on:
+      - db
+    links:
+      - db
+
+  flower:
+    image: unicef/datamart:${VERSION}
+    command: celery flower -A etools_datamart --port=5555 --loglevel=DEBUG --inspect --basic_auth=${FLOWER_USER}:${FLOWER_PWD}
+    environment: *environment
+    depends_on:
+      - db
+    links:
+      - db
+    ports:
+      - 5555:5555
+
+  uniset:
+    image: unicef/uniset:dev
+    environment:
+      CACHE_REDIS_URL: "redis://redis:6379/9"
+      DATABASE_URL: postgres://postgres:$POSTGRES_PASSWORD@db:5432/uniset
+      SECRET_KEY: gerwtrewtriuhpoikjpojfgdngvcgerw
+      AUTHORITY_URL: saxix.onmicrosoft.com
+      AZURE_CLIENT_ID: $UNISET_AZURE_CLIENT_ID
+      AZURE_CLIENT_SECRET: $UNISET_AZURE_CLIENT_SECRET
+    depends_on:
+      - db
+    links:
+      - db
+    ports:
+      - 8088:8088
+
+  db:
+    image: postgres:9.6
+    environment:
+      POSTGRES_PASSWORD: $POSTGRES_PASSWORD
+      POSTGRES_USER: postgres
+      POSTGRES_DB: etools_datamart
+    volumes:
+      - "./~build/volumes/db/data:/var/lib/postgresql/data"
+
+#  adminer:
+#    image: adminer
+#    ports:
+#      - 8080:8080
+
+  pgadmin4:
+    image: dpage/pgadmin4
+    environment:
+      PGADMIN_DEFAULT_EMAIL: $PGADMIN_DEFAULT_EMAIL
+      PGADMIN_DEFAULT_PASSWORD: $POSTGRES_PASSWORD
+    ports:
+      - 9000:80
+
+  elastic:
+    image: docker.elastic.co/elasticsearch/elasticsearch:6.4.2
+    ports:
+      - 9200:9200
+      - 9300:9300
+    environment:
+       - discovery.type= single-node
+       - cluster.name=docker-cluster
+       - bootstrap.memory_lock=true
+       - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - ./~build/volumes/es1/data:/usr/share/elasticsearch/data
